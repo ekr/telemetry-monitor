@@ -1,0 +1,7 @@
+{
+  "name": "telemetry-monitor",
+  "main": "run.js",
+  "dependencies": {
+     "telemetry-next-node":""
+  }
+}
