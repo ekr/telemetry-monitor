@@ -9,6 +9,10 @@ var client = new irc.Client('irc.mozilla.org', nick, {
     channels: [ircchannel],
 });
 
+client.addListener('message', function (from, to, message) {
+    console.log(from + ' => ' + to + ': ' + message);
+});
+
 var gMaxVersion;
 var kChannelOffsets = {
     nightly:0,
