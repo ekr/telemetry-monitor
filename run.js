@@ -1,6 +1,14 @@
 var Telemetry = require('telemetry-next-node');
+var gauss = require('gauss');
 
-var gAllVersions = null;
+var gMaxVersion;
+var kChannelOffsets = {
+    nightly:0,
+    aurora:-1,
+    beta:-2,
+    release:-3
+};
+
 
 function assert(condition, message) {
     if (!condition) {
@@ -9,65 +17,75 @@ function assert(condition, message) {
     return condition;
 }
 
+function debug(msg) {
+    console.log(msg);
+}
 function recordVersions(vlist) {
-    gAllVersions = {
-        nightly:[],
-        aurora:[],
-        beta:[],
-        release:[]
-    };
-
+    debug(vlist);
+    
     vlist.forEach(v => {
         var x;
 
-        console.log(v);
         x = v.split("/");
-        gAllVersions[x[0]].push(x[1]);
+        gMaxVersion = parseInt(x[1]);
     });
-
-    console.log(gAllVersions);
+    debug("Maximum version = " + gMaxVersion);
 }
 
 function timeSeries(channel, metric, lookback, cb) {
     var version_ct = Math.floor((lookback / 42) + 2);  // Max number of versions to capture lookback days
-    var versions = gAllVersions[channel].slice(-1 * version_ct);
+    var i;
+    var v;
     var dates = [new Date(Date.now() - (1000 * 60 * 60 * 24 * lookback)), new Date()];
     var evolutions = null;
-
-    versions.forEach(function (v) {
-        console.log("Version " +v);
-        console.log(channel);
-
+    
+    for (i=1; i<=version_ct; ++i) {
+        v = gMaxVersion + kChannelOffsets[channel] + i - version_ct;
+        debug(v);
         Telemetry.getEvolution(channel, v.toString(), metric, {}, true, function(evolutionMap) {
-            if (!evolutions) {
-                console.log("XXX");
-                evolutions = evolutionMap[""];
-            } else {
-                console.log("YYY");
-                evolutions.combine(evolutionMap[""]);
+            if (evolutionMap[""]) {
+                if (!evolutions) {
+                    evolutions = evolutionMap[""];
+                } else {
+                    evolutions = evolutions.combine(evolutionMap[""]);
+                }
             }
-
-            if (evolutions) {
-                console.log("Evolution is non-null");
-            }
-            
             version_ct--;
             if (!version_ct) {
                 cb(evolutions.dateRange(dates[0], dates[1]));
             }
         });
+    }
+};
+
+function lookForBreaks(series, bucket) {
+    var data=[];
+    series.map(function(hist, i, date) {
+        var sd;
+        var mean;
+        var v;
+        var value = hist.values[bucket]/hist.count;
+        debug(date);
+        if (data.length > 5) {
+            v = gauss.Vector(data);
+            mean = v.mean();
+            sd = v.stdev();
+            if (Math.abs(value - mean) > (2 * sd)) {
+                debug("Anomaly at " + date + " mean = " + mean
+                      + " value = " + value);
+            }
+        }
+        data.push(value);
     });
- };
+}
 
-
- Telemetry.init(function() {
+Telemetry.init(function() {
     recordVersions(Telemetry.getVersions());
-    timeSeries("nightly", "CERT_CHAIN_SIGNATURE_DIGEST_STATUS", 30,
-               function(e) {
-                   e.map(function(hist, i, date) {
-                       console.log(date);
-                       console.log(hist);
-                   });
-               }
-              );
-});
+    timeSeries("beta", "CERT_CHAIN_SIGNATURE_DIGEST_STATUS", 60,
+                    function(e) {
+                        lookForBreaks(e, 5);
+                    }
+               );
+    });
+
+
