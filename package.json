@@ -3,6 +3,7 @@
   "main": "run.js",
   "dependencies": {
      "telemetry-next-node":"",
-     "gauss":""
+     "gauss":"",
+     "irc":""
   }
 }

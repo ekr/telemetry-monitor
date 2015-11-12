@@ -1,6 +1,12 @@
 var Telemetry = require('telemetry-next-node');
 var gauss = require('gauss');
 var fs = require('fs');
+var irc = require('irc');
+var ircchannel = '#telemetry-monitoring';
+
+var client = new irc.Client('irc.mozilla.org', 'telemetry-monitor2', {
+    channels: [ircchannel],
+});
 
 var gMaxVersion;
 var kChannelOffsets = {
@@ -12,7 +18,8 @@ var kChannelOffsets = {
 
 var kDefaultConfig = {
     lookback : 60,
-    threshold : 2
+    threshold : 2,
+    interval: 86400
 };
 
 function assert(condition, message) {
@@ -23,14 +30,24 @@ function assert(condition, message) {
 }
 
 function debug(msg) {
-    console.log(msg);
+    if (configParam(config, null, 'verbose')) {
+        console.log(msg);
+    }
+}
+
+
+function report(msg) {
+    if (!configParam(config, null, 'quiet')) {
+        console.log(msg);
+    }
+    client.say(ircchannel, msg);
 }
 
 function configParam(config, cconfig, param) {
-    if (cconfig && (cconfig[param] !== undefined))
-        return cconfig[param];
-    if (config && (config[param] !== undefined))
-        return config[param];
+    if (cconfig && cconfig.params && (cconfig.params[param] !== undefined))
+        return cconfig.params[param];
+    if (config && config.params && (config.params[param] !== undefined))
+        return config.params[param];
 
     return kDefaultConfig[param];
 }
@@ -64,8 +81,8 @@ function lookForBreaks(channel, metric, buckets, series) {
                 mean = v.mean();
                 sd = v.stdev();
                 if (Math.abs(value - mean) > (configParam(config, null, 'threshold') * sd)) {
-                    console.log("ANOMALY: " + metric + ":" + channel + ":" + bucket + " " + date + " mean=" + mean
-                                + " value=" + value);
+                    report("ANOMALY: " + metric + ":" + channel + ":" + bucket + " " + date + " mean=" + mean
+                           + " value=" + value);
                 }
             }
             baseline.push(value);
@@ -106,27 +123,33 @@ function timeSeries(channel, metric, buckets, lookback) {
     }
 };
 
+function runChecks() {
+    Telemetry.init(function() {
+        var metric;
+        var channel;
+        var buckets;
+        var cconfig;
+
+        recordVersions(Telemetry.getVersions());
+        for (metric in config.metrics) {
+            cconfig = config.metrics[metric];
+            cconfig.channels.forEach(function(channel) {
+                debug("Measuring " + metric + " channel=" + channel + " buckets =" + cconfig.buckets );
+                timeSeries(channel, metric, cconfig.buckets, configParam(config, cconfig, 'lookback'));
+            });
+        }
+    });
+
+    setTimeout(runChecks, configParam(config, null, 'interval')*1000);
+}    
+
 if (process.argv.length != 3)
     throw "Provide config file";
 
 var configStr = fs.readFileSync(process.argv[2]);
 var config = JSON.parse(configStr);
 
-Telemetry.init(function() {
-    var metric;
-    var channel;
-    var buckets;
-    var cconfig;
-
-    recordVersions(Telemetry.getVersions());
-    for (metric in config) {
-        cconfig = config[metric];
-        cconfig.channels.forEach(function(channel) {
-            debug("Measuring " + metric + " channel=" + channel + " buckets =" + cconfig.buckets );
-            timeSeries(channel, metric, cconfig.buckets, configParam(config, cconfig, 'lookback'));
-        });
-    }
-});
+runChecks();
 
 
 
