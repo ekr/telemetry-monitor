@@ -10,6 +10,11 @@ var kChannelOffsets = {
     release:-3
 };
 
+var kDefaultConfig = {
+    lookback : 60,
+    threshold : 2
+};
+
 function assert(condition, message) {
     if (!condition) {
       throw message === undefined ? "Assertion failed" : message;
@@ -18,8 +23,18 @@ function assert(condition, message) {
 }
 
 function debug(msg) {
-//    console.log(msg);
+    console.log(msg);
 }
+
+function configParam(config, cconfig, param) {
+    if (cconfig && (cconfig[param] !== undefined))
+        return cconfig[param];
+    if (config && (config[param] !== undefined))
+        return config[param];
+
+    return kDefaultConfig[param];
+}
+
 function recordVersions(vlist) {
     debug(vlist);
     
@@ -48,7 +63,7 @@ function lookForBreaks(channel, metric, buckets, series) {
                 v = gauss.Vector(baseline);
                 mean = v.mean();
                 sd = v.stdev();
-                if (Math.abs(value - mean) > (2 * sd)) {
+                if (Math.abs(value - mean) > (configParam(config, null, 'threshold') * sd)) {
                     console.log("ANOMALY: " + metric + ":" + channel + ":" + bucket + " " + date + " mean=" + mean
                                 + " value=" + value);
                 }
@@ -65,7 +80,7 @@ function timeSeries(channel, metric, buckets, lookback) {
     var dates = [new Date(Date.now() - (1000 * 60 * 60 * 24 * lookback)), new Date()];
     var evolutions = null;
 
-    debug("Time series for " + channel + ":" + metric);
+    debug("Time series for " + channel + ":" + metric + " lookback = " + lookback);
 
     for (i=1; i<=version_ct; ++i) {
         v = gMaxVersion + kChannelOffsets[channel] + i - version_ct;
@@ -102,8 +117,8 @@ Telemetry.init(function() {
     for (metric in config) {
         cconfig = config[metric];
         cconfig.channels.forEach(function(channel) {
-            debug("Measuring " + metric + " channel=" + channel + "buckets =" + cconfig.buckets );
-            timeSeries(channel, metric, cconfig.buckets, 60);
+            debug("Measuring " + metric + " channel=" + channel + " buckets =" + cconfig.buckets );
+            timeSeries(channel, metric, cconfig.buckets, configParam(config, cconfig, 'lookback'));
         });
     }
 });
