@@ -3,8 +3,9 @@ var gauss = require('gauss');
 var fs = require('fs');
 var irc = require('irc');
 var ircchannel = '#telemetry-monitoring';
+var nick = 'telemetry-monitor' + Math.floor(Math.random() * 10000);
 
-var client = new irc.Client('irc.mozilla.org', 'telemetry-monitor2', {
+var client = new irc.Client('irc.mozilla.org', nick, {
     channels: [ircchannel],
 });
 
