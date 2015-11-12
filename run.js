@@ -86,15 +86,20 @@ function timeSeries(channel, metric, buckets, lookback) {
         v = gMaxVersion + kChannelOffsets[channel] + i - version_ct;
         debug("Looking at version " + v);
         Telemetry.getEvolution(channel, v.toString(), metric, {}, true, function(evolutionMap) {
+            debug("Report for version " + v);
             if (evolutionMap[""]) {
+                debug(evolutionMap[""]);
                 if (!evolutions) {
                     evolutions = evolutionMap[""];
                 } else {
                     evolutions = evolutions.combine(evolutionMap[""]);
                 }
+            } else {
+                debug("Empty report");
             }
             version_ct--;
             if (!version_ct) {
+                debug("Complete for " + channel + ":" + metric + " lookback = " + lookback);
                 lookForBreaks(channel, metric, buckets, evolutions.dateRange(dates[0], dates[1]));
             }
         });
