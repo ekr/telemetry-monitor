@@ -154,7 +154,7 @@ if (process.argv.length != 3)
 var configStr = fs.readFileSync(process.argv[2]);
 var config = JSON.parse(configStr);
 
-runChecks();
+setTimeout(runChecks, 10000);
 
 
 
