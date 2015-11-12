@@ -49,9 +49,9 @@ function recordVersions(vlist) {
 
 
 function lookForBreaks(channel, metric, buckets, series) {
-    var baseline=[];
-
     buckets.forEach(function(bucket) {
+        var baseline=[];
+
         debug("Looking for breaks in bucket " + bucket);
         series.map(function(hist, i, date) {
             var sd;
