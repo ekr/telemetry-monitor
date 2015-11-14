@@ -4,6 +4,7 @@ var fs = require('fs');
 var irc = require('irc');
 var ircchannel = '#telemetry-monitoring';
 var nick = 'telemetry-monitor' + Math.floor(Math.random() * 10000);
+var gReported = {};
 
 var client = new irc.Client('irc.mozilla.org', nick, {
     channels: [ircchannel],
@@ -12,6 +13,7 @@ var client = new irc.Client('irc.mozilla.org', nick, {
 client.addListener('message', function (from, to, message) {
     console.log(from + ' => ' + to + ': ' + message);
 });
+
 
 var gMaxVersion;
 var kChannelOffsets = {
@@ -34,18 +36,27 @@ function assert(condition, message) {
     return condition;
 }
 
-function debug(msg) {
-    if (configParam(config, null, 'verbose')) {
+function log(level, msg) {
+   if (configParam(config, null, 'loglevel')>=level) {
         console.log(msg);
-    }
+   }
 }
 
+function debug(msg) {
+    log(2, msg);
+}
 
-function report(msg) {
-    if (!configParam(config, null, 'quiet')) {
-        console.log(msg);
-    }
-    client.say(ircchannel, msg);
+function report(date, metric, channel, bucket, msg) {
+    var id = [metric, channel, bucket, date].join(":");
+    var emit = "ANOMALY: " + id + " " + msg;
+    
+    log(1, emit);
+
+    if (gReported[id])
+        return;
+
+    gReported[id] = msg;
+    client.say(ircchannel, emit);
 }
 
 function configParam(config, cconfig, param) {
@@ -86,8 +97,8 @@ function lookForBreaks(channel, metric, buckets, series) {
                 mean = v.mean();
                 sd = v.stdev();
                 if (Math.abs(value - mean) > (configParam(config, null, 'threshold') * sd)) {
-                    report("ANOMALY: " + metric + ":" + channel + ":" + bucket + " " + date + " mean=" + mean
-                           + " value=" + value);
+                    report(date, metric, channel, bucket,
+                          "mean=" + mean + " value=" + value);
                 }
             }
             baseline.push(value);
