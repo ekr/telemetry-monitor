@@ -26,7 +26,8 @@ var kChannelOffsets = {
 var kDefaultConfig = {
     lookback : 60,
     threshold : 2,
-    interval: 86400
+    interval: 86400,
+    loglevel: 0
 };
 
 function assert(condition, message) {
