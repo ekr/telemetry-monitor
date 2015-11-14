@@ -1,10 +1,12 @@
 var Telemetry = require('telemetry-next-node');
 var gauss = require('gauss');
+var _ = require('underscore');
 var fs = require('fs');
 var irc = require('irc');
 var ircchannel = '#telemetry-monitoring';
 var nick = 'telemetry-monitor' + Math.floor(Math.random() * 10000);
 var gReported = {};
+var gNewReports = {};
 
 var client = new irc.Client('irc.mozilla.org', nick, {
     channels: [ircchannel],
@@ -27,7 +29,8 @@ var kDefaultConfig = {
     lookback : 60,
     threshold : 2,
     interval: 86400,
-    loglevel: 0
+    loglevel: 0,
+    notify: []
 };
 
 function assert(condition, message) {
@@ -58,6 +61,8 @@ function report(date, metric, channel, bucket, msg) {
 
     gReported[id] = msg;
     client.say(ircchannel, emit);
+    gNewReports[metric] = gNewReports[metric] ? 
+        gNewReports[metric]+1 : 1;
 }
 
 function configParam(config, cconfig, param) {
@@ -107,7 +112,7 @@ function lookForBreaks(channel, metric, buckets, series) {
     });
 }
 
-function timeSeries(channel, metric, buckets, lookback) {
+function timeSeries(channel, metric, buckets, lookback, finished_cb) {
     var version_ct = Math.floor((lookback / 42) + 2);  // Max number of versions to capture lookback days
     var i;
     var v;
@@ -135,10 +140,25 @@ function timeSeries(channel, metric, buckets, lookback) {
             if (!version_ct) {
                 debug("Complete for " + channel + ":" + metric + " lookback = " + lookback);
                 lookForBreaks(channel, metric, buckets, evolutions.dateRange(dates[0], dates[1]));
+                finished_cb();
             }
         });
     }
 };
+
+function notify_done() {
+    var tonotify = configParam(config, null, 'notify');
+    debug("Notifying: " + tonotify);
+    if (!tonotify || !tonotify.length)
+        return;
+
+    debug("New reports " + JSON.stringify(gNewReports));
+    if (_.size(gNewReports)) {
+        debug("Reporting...");
+        client.say(ircchannel, tonotify.join(",") + ": new anomalies in "+
+                  JSON.stringify(gNewReports));
+    }
+}
 
 function runChecks() {
     Telemetry.init(function() {
@@ -146,13 +166,17 @@ function runChecks() {
         var channel;
         var buckets;
         var cconfig;
+        gNewReports = {};
 
         recordVersions(Telemetry.getVersions());
+
+        var after_done = _.after(_.size(config.metrics), notify_done);
+        
         for (metric in config.metrics) {
             cconfig = config.metrics[metric];
             cconfig.channels.forEach(function(channel) {
                 debug("Measuring " + metric + " channel=" + channel + " buckets =" + cconfig.buckets );
-                timeSeries(channel, metric, cconfig.buckets, configParam(config, cconfig, 'lookback'));
+                timeSeries(channel, metric, cconfig.buckets, configParam(config, cconfig, 'lookback'), after_done);
             });
         }
     });

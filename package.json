@@ -4,6 +4,7 @@
   "dependencies": {
      "telemetry-next-node":"",
      "gauss":"",
-     "irc":""
+     "irc":"",
+     "underscore":""
   }
 }
